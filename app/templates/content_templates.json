@@ -1,0 +1,22 @@
+{
+  "meme_problem_solution": {
+    "scene_roles": ["problem", "contrast", "solution"],
+    "mood": "comic contrast",
+    "prompt_style": "short viral meme"
+  },
+  "dark_cinematic": {
+    "scene_roles": ["hook_closeup", "reveal", "brand_line"],
+    "mood": "dark cyber tension",
+    "prompt_style": "dark cinematic realism"
+  },
+  "funny_pet_contrast": {
+    "scene_roles": ["human_fails", "pet_succeeds", "brand_punchline"],
+    "mood": "funny contrast",
+    "prompt_style": "humorous contrast"
+  },
+  "problem_solution_cta": {
+    "scene_roles": ["problem", "contrast", "solution", "cta"],
+    "mood": "direct response",
+    "prompt_style": "performance marketing short"
+  }
+}

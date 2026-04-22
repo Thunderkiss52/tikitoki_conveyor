@@ -1,0 +1,16 @@
+.env
+__pycache__/
+.pytest_cache/
+.ruff_cache/
+third_party/
+helpers/*.Zone.Identifier
+storage/jobs/*
+storage/input/trends/*
+exports/*
+!storage/jobs/.gitkeep
+!storage/input/.gitkeep
+!storage/input/trends/.gitkeep
+!storage/assets/.gitkeep
+!exports/.gitkeep
+!workflows/.gitkeep
+*.pyc

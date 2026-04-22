@@ -1,0 +1,15 @@
+fastapi
+uvicorn[standard]
+sqlalchemy[asyncio]
+asyncpg
+aiosqlite
+alembic
+pydantic-settings
+redis
+rq
+ffmpeg-python
+moviepy
+python-multipart
+httpx
+jinja2
+python-dotenv

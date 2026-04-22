@@ -1,0 +1,13 @@
+{
+  "prompt": ["6.inputs.text"],
+  "negative_prompt": ["7.inputs.text"],
+  "width": ["12.inputs.width"],
+  "height": ["12.inputs.height"],
+  "frames": ["12.inputs.batch_size"],
+  "steps": ["3.inputs.steps"],
+  "cfg": ["3.inputs.cfg"],
+  "seed": ["3.inputs.seed"],
+  "fps": ["30.inputs.frame_rate"],
+  "filename_prefix": ["30.inputs.filename_prefix"],
+  "brand_image": ["50.inputs.image"]
+}
