@@ -8,6 +8,8 @@ helpers/*.Zone.Identifier
 storage/jobs/*
 storage/input/trends/*
 storage/runtime/*
+storage/assets/logos/*
+storage/assets/uploads/*
 exports/*
 !storage/jobs/.gitkeep
 !storage/input/.gitkeep

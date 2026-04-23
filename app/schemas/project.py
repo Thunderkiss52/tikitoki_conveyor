@@ -24,6 +24,11 @@ class ProjectCreate(BaseModel):
     config: ProjectConfig = Field(default_factory=ProjectConfig)
 
 
+class ProjectUpdate(BaseModel):
+    name: str
+    config: ProjectConfig = Field(default_factory=ProjectConfig)
+
+
 class ProjectRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 

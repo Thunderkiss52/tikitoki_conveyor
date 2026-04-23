@@ -30,6 +30,7 @@ class Settings(BaseSettings):
     DEFAULT_TTS_PROVIDER: str = "piper"
     DEFAULT_MUSIC_PROVIDER: str = "hybrid"
     DEFAULT_SCRIPT_PROVIDER: str = "template"
+    TEXT_ONLY_VIDEO_PROVIDER: str = "synthetic"
 
     COMFYUI_BASE_URL: str = "http://127.0.0.1:8188"
     COMFYUI_TIMEOUT_SEC: int = 600
@@ -40,6 +41,12 @@ class Settings(BaseSettings):
     PIPER_BIN: str = "third_party/piper/piper/piper"
     PIPER_MODEL_DIR: str = "storage/assets/voices/piper"
     PIPER_DEFAULT_MODEL_RU: str = "storage/assets/voices/piper/ru_RU-dmitri-medium.onnx"
+
+    OPENAI_API_KEY: str | None = None
+    OPENAI_BASE_URL: str | None = None
+    OPENAI_PROMPT_MODEL: str = "gpt-5.4-mini"
+    OPENAI_PROMPT_TIMEOUT_SEC: float = 30.0
+    OPENAI_PROMPT_REASONING_EFFORT: str = "low"
 
     DEFAULT_ASPECT: str = "9:16"
     DEFAULT_WIDTH: int = 1080

@@ -1,28 +1,24 @@
-version: '3.8'
-
 services:
   db:
     image: postgres:15-alpine
+    init: true
     restart: unless-stopped
     volumes:
       - postgres_data:/var/lib/postgresql/data
     environment:
-      - POSTGRES_USER=postgres
-      - POSTGRES_PASSWORD=postgres
-      - POSTGRES_DB=tikitoki
-    ports:
-      - "5432:5432"
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_DB: ${POSTGRES_DB:-tikitoki}
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres -d tikitoki"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-tikitoki}"]
       interval: 5s
       timeout: 5s
       retries: 5
 
   redis:
     image: redis:7-alpine
+    init: true
     restart: unless-stopped
-    ports:
-      - "6379:6379"
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s
@@ -31,38 +27,91 @@ services:
 
   api:
     build: .
+    init: true
     restart: unless-stopped
     volumes:
-      - .:/app
       - ./storage:/app/storage
+      - ./third_party:/app/third_party
     environment:
-      - DATABASE_URL=postgresql+asyncpg://postgres:postgres@db/tikitoki
-      - REDIS_URL=redis://redis:6379/0
-      - STORAGE_BASE_PATH=storage
+      DEBUG: ${DOCKER_DEBUG:-false}
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@db/${POSTGRES_DB:-tikitoki}
+      REDIS_URL: redis://redis:6379/0
+      JOB_QUEUE_NAME: ${DOCKER_JOB_QUEUE_NAME:-video_jobs}
+      STORAGE_BASE_PATH: /app/storage
+      DEFAULT_VIDEO_PROVIDER: ${DOCKER_DEFAULT_VIDEO_PROVIDER:-reference}
+      DEFAULT_TTS_PROVIDER: ${DOCKER_DEFAULT_TTS_PROVIDER:-stub}
+      DEFAULT_MUSIC_PROVIDER: ${DOCKER_DEFAULT_MUSIC_PROVIDER:-library}
+      DEFAULT_SCRIPT_PROVIDER: ${DOCKER_DEFAULT_SCRIPT_PROVIDER:-template}
+      TEXT_ONLY_VIDEO_PROVIDER: ${DOCKER_TEXT_ONLY_VIDEO_PROVIDER:-synthetic}
+      COMFYUI_BASE_URL: ${DOCKER_COMFYUI_BASE_URL:-http://host.docker.internal:8188}
+      COMFYUI_INPUT_DIR: /app/third_party/ComfyUI/input
+      PIPER_BIN: /app/third_party/piper/piper/piper
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENAI_BASE_URL: ${OPENAI_BASE_URL:-}
+      OPENAI_PROMPT_MODEL: ${OPENAI_PROMPT_MODEL:-gpt-5.4-mini}
+      OPENAI_PROMPT_TIMEOUT_SEC: ${OPENAI_PROMPT_TIMEOUT_SEC:-30}
+      OPENAI_PROMPT_REASONING_EFFORT: ${OPENAI_PROMPT_REASONING_EFFORT:-low}
     ports:
-      - "8000:8000"
+      - "${DOCKER_APP_PORT:-8000}:8000"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     depends_on:
       db:
         condition: service_healthy
       redis:
         condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8000/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
 
   worker:
     build: .
+    init: true
     restart: unless-stopped
     command: python -m app.workers.worker
     volumes:
-      - .:/app
       - ./storage:/app/storage
+      - ./third_party:/app/third_party
     environment:
-      - DATABASE_URL=postgresql+asyncpg://postgres:postgres@db/tikitoki
-      - REDIS_URL=redis://redis:6379/0
-      - STORAGE_BASE_PATH=storage
+      DEBUG: ${DOCKER_DEBUG:-false}
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@db/${POSTGRES_DB:-tikitoki}
+      REDIS_URL: redis://redis:6379/0
+      JOB_QUEUE_NAME: ${DOCKER_JOB_QUEUE_NAME:-video_jobs}
+      STORAGE_BASE_PATH: /app/storage
+      DEFAULT_VIDEO_PROVIDER: ${DOCKER_DEFAULT_VIDEO_PROVIDER:-reference}
+      DEFAULT_TTS_PROVIDER: ${DOCKER_DEFAULT_TTS_PROVIDER:-stub}
+      DEFAULT_MUSIC_PROVIDER: ${DOCKER_DEFAULT_MUSIC_PROVIDER:-library}
+      DEFAULT_SCRIPT_PROVIDER: ${DOCKER_DEFAULT_SCRIPT_PROVIDER:-template}
+      TEXT_ONLY_VIDEO_PROVIDER: ${DOCKER_TEXT_ONLY_VIDEO_PROVIDER:-synthetic}
+      COMFYUI_BASE_URL: ${DOCKER_COMFYUI_BASE_URL:-http://host.docker.internal:8188}
+      COMFYUI_INPUT_DIR: /app/third_party/ComfyUI/input
+      PIPER_BIN: /app/third_party/piper/piper/piper
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     depends_on:
       db:
         condition: service_healthy
       redis:
         condition: service_healthy
+      api:
+        condition: service_healthy
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - |
+          from pathlib import Path
+          import sys
+          data = Path("/proc/1/cmdline").read_text(encoding="utf-8", errors="ignore")
+          sys.exit(0 if "app.workers.worker" in data else 1)
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
 
 volumes:
   postgres_data:

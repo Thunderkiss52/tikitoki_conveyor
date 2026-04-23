@@ -417,7 +417,8 @@ def mux_video_with_audio(
     current_label = "[0:v]"
 
     if logo_index is not None:
-        filters.append(f"{current_label}[{logo_index}:v]overlay=W-w-48:48[vlogo]")
+        filters.append(f"[{logo_index}:v]scale=w=220:h=220:force_original_aspect_ratio=decrease[logo]")
+        filters.append(f"{current_label}[logo]overlay=W-w-48:48[vlogo]")
         current_label = "[vlogo]"
 
     if subtitles_path and subtitles_path.exists():

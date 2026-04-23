@@ -16,6 +16,14 @@ class TrendSourceCreate(BaseModel):
     metadata_json: dict[str, Any] = Field(default_factory=dict)
 
 
+class TrendSourceUpdate(BaseModel):
+    type: TrendSourceType = TrendSourceType.VIDEO
+    source_path: str
+    hook_description: str | None = None
+    structure_detected: bool = False
+    metadata_json: dict[str, Any] = Field(default_factory=dict)
+
+
 class TrendSourceRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 

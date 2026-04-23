@@ -36,6 +36,7 @@ def ensure_base_storage() -> None:
         settings.assets_root / "logos",
         settings.assets_root / "fonts",
         settings.assets_root / "music_library",
+        settings.assets_root / "uploads",
         settings.input_root / "trends",
     ):
         path.mkdir(parents=True, exist_ok=True)

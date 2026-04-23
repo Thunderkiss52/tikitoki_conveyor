@@ -14,3 +14,5 @@ httpx
 jinja2
 python-dotenv
 imageio-ffmpeg
+Pillow
+openai

@@ -70,7 +70,30 @@ cp .env.example .env
 docker-compose up --build
 ```
 
-API будет на `http://localhost:8000`, Swagger на `http://localhost:8000/docs`.
+API будет на `http://localhost:8000`, Swagger на `http://localhost:8000/docs`, UI на `http://localhost:8000/ui/`.
+
+Если хочешь, чтобы prompt parsing шел через ChatGPT API, задай:
+
+```bash
+export OPENAI_API_KEY=...
+export OPENAI_PROMPT_MODEL=gpt-5.4-mini
+```
+
+Без `OPENAI_API_KEY` UI все равно работает, но prompt будет разбираться локальным fallback planner.
+
+Текущий `docker-compose.yml` теперь ориентирован на production-like запуск:
+
+- `api`, `worker`, `postgres`, `redis` живут в Docker
+- код baked в image, без bind-mount всего репозитория
+- `storage/` и `third_party/` пробрасываются как data volumes на хосте
+- API стартует без `--reload`
+- UI раздается тем же FastAPI контейнером
+
+Если `8000` занят, подними стек на другом порту:
+
+```bash
+DOCKER_APP_PORT=8010 docker compose up --build
+```
 
 ### Локально
 
@@ -313,6 +336,22 @@ python scripts/run_local_hodor.py \
 
 По умолчанию runner сам сгенерирует demo trend video, если файл не найден.
 
+## UI
+
+Теперь UI работает в prompt-first режиме:
+
+- входные данные: `pictures`, `reference video`, `logo`, базовый `Generation Config`
+- chat разбирает prompt на параметры и собирает `plan`
+- если `reference video` не задан, UI автоматически переходит в:
+  - `image_sequence`, если загружены картинки
+  - `text_only`, если визуальных референсов нет
+- `Shot Overrides` скрыты по умолчанию и появляются как упрощенный `Scene Tuning` только после первой генерации
+- просмотр `jobs`, `final.mp4`, `thumb.jpg`, `meta.json`, `subtitles`, `voiceover`, `music`
+
+URL:
+
+- `http://localhost:8000/ui/`
+
 ## Основные API endpoints
 
 - `POST /api/v1/projects`
@@ -324,6 +363,10 @@ python scripts/run_local_hodor.py \
 - `POST /api/v1/jobs/{job_id}/run`
 - `GET /api/v1/jobs`
 - `GET /api/v1/jobs/{job_id}`
+- `POST /api/v1/ui/assistant/plan`
+- `POST /api/v1/ui/assistant/generate`
+- `POST /api/v1/ui/assets/upload`
+- `GET /api/v1/ui/assets`
 
 ## Пример потока
 

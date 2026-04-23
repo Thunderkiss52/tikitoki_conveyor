@@ -2,7 +2,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import Project
-from app.schemas.project import ProjectCreate
+from app.schemas.project import ProjectCreate, ProjectUpdate
 
 
 class ProjectService:
@@ -27,6 +27,14 @@ class ProjectService:
             config_json=payload.config.as_db_config(),
         )
         session.add(project)
+        await session.commit()
+        await session.refresh(project)
+        return project
+
+    @staticmethod
+    async def update(session: AsyncSession, project: Project, payload: ProjectUpdate) -> Project:
+        project.name = payload.name
+        project.config_json = payload.config.as_db_config()
         await session.commit()
         await session.refresh(project)
         return project

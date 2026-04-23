@@ -1,0 +1,231 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Tikitoki Prompt Studio</title>
+    <link rel="stylesheet" href="/ui/app.css">
+    <script defer src="/ui/app.js"></script>
+  </head>
+  <body>
+    <div class="app-shell">
+      <header class="topbar">
+        <div class="title-block">
+          <p class="eyebrow">Prompt-First Docker Console</p>
+          <h1>Tikitoki Prompt Studio</h1>
+          <p class="subhead">Картинки, референс-видео, Generation Config и chat-driven генерация.</p>
+        </div>
+        <div class="status-strip">
+          <div class="status-chip" id="apiStatusChip">API: ...</div>
+          <div class="status-chip" id="assistantStatusChip">Assistant: ...</div>
+          <div class="status-chip" id="runtimeStatusChip">Runtime: ...</div>
+        </div>
+        <div class="toolbar">
+          <button class="action-button" id="refreshButton" type="button">
+            <span class="button-icon">~</span><span>Refresh</span>
+          </button>
+          <button class="action-button action-primary" id="generateNowButton" type="button">
+            <span class="button-icon">&gt;</span><span>Generate Now</span>
+          </button>
+          <button class="action-button" id="queueJobButton" type="button">
+            <span class="button-icon">=</span><span>Queue Job</span>
+          </button>
+        </div>
+      </header>
+
+      <div class="message-bar" id="messageBar">Загрузка интерфейса...</div>
+
+      <main class="workspace-grid">
+        <section class="workspace-section">
+          <div class="section-heading">
+            <h2>Inputs</h2>
+          </div>
+
+          <div class="input-stack">
+            <section class="input-block">
+              <div class="block-heading">
+                <h3>Pictures</h3>
+                <button class="action-button mini-button" id="clearImagesButton" type="button">
+                  <span class="button-icon">x</span><span>Clear</span>
+                </button>
+              </div>
+              <label class="file-field">
+                <span class="button-like"><span class="button-icon">^</span><span>Upload Pictures</span></span>
+                <input id="imagesUploadInput" type="file" accept="image/*" multiple>
+              </label>
+              <div class="asset-grid" id="imagesGrid"></div>
+            </section>
+
+            <section class="input-block">
+              <div class="block-heading">
+                <h3>Reference Video</h3>
+                <button class="action-button mini-button" id="clearReferenceButton" type="button">
+                  <span class="button-icon">x</span><span>Clear</span>
+                </button>
+              </div>
+              <label class="file-field">
+                <span class="button-like"><span class="button-icon">^</span><span>Upload Reference</span></span>
+                <input id="referenceUploadInput" type="file" accept="video/*">
+              </label>
+              <div class="single-asset-slot" id="referenceSlot"></div>
+            </section>
+
+            <section class="input-block">
+              <div class="block-heading">
+                <h3>Logo</h3>
+                <button class="action-button mini-button" id="clearLogoButton" type="button">
+                  <span class="button-icon">x</span><span>Clear</span>
+                </button>
+              </div>
+              <label class="file-field">
+                <span class="button-like"><span class="button-icon">^</span><span>Upload Logo</span></span>
+                <input id="logoUploadInput" type="file" accept="image/*">
+              </label>
+              <div class="single-asset-slot" id="logoSlot"></div>
+            </section>
+
+            <section class="input-block">
+              <div class="block-heading">
+                <h3>Generation Config</h3>
+              </div>
+              <div class="field-grid two-col">
+                <label class="field field-span-2">
+                  <span>Topic</span>
+                  <input id="topicInput" type="text" placeholder="О чем ролик и что нужно показать">
+                </label>
+                <label class="field">
+                  <span>Duration</span>
+                  <input id="durationInput" type="number" min="3" max="60" step="1">
+                </label>
+                <label class="field">
+                  <span>Aspect</span>
+                  <select id="aspectInput">
+                    <option value="9:16">9:16</option>
+                    <option value="16:9">16:9</option>
+                    <option value="1:1">1:1</option>
+                  </select>
+                </label>
+                <label class="field">
+                  <span>Language</span>
+                  <input id="languageInput" type="text" placeholder="ru">
+                </label>
+                <label class="field">
+                  <span>Platform</span>
+                  <input id="platformInput" type="text" placeholder="tiktok">
+                </label>
+                <label class="field field-span-2">
+                  <span>CTA</span>
+                  <input id="ctaInput" type="text" placeholder="Ссылка в профиле">
+                </label>
+                <label class="field">
+                  <span>Export Resolution</span>
+                  <input id="resolutionInput" type="text" placeholder="1080x1920">
+                </label>
+                <label class="field">
+                  <span>Title Override</span>
+                  <input id="titleInput" type="text" placeholder="Optional">
+                </label>
+              </div>
+              <div class="toggle-grid">
+                <label class="toggle">
+                  <input id="subtitlesToggle" type="checkbox">
+                  <span>Subtitles</span>
+                </label>
+                <label class="toggle">
+                  <input id="voiceoverToggle" type="checkbox">
+                  <span>Voiceover</span>
+                </label>
+                <label class="toggle">
+                  <input id="brandOverlayToggle" type="checkbox">
+                  <span>Brand Overlay</span>
+                </label>
+              </div>
+            </section>
+          </div>
+        </section>
+
+        <section class="workspace-section">
+          <div class="section-heading">
+            <h2>Prompt Chat</h2>
+            <div class="inline-tools">
+              <button class="action-button mini-button" id="planPromptButton" type="button">
+                <span class="button-icon">!</span><span>Analyze Prompt</span>
+              </button>
+              <button class="action-button mini-button" id="clearChatButton" type="button">
+                <span class="button-icon">x</span><span>Clear Chat</span>
+              </button>
+            </div>
+          </div>
+
+          <div class="chat-log" id="chatLog"></div>
+
+          <label class="field top-gap">
+            <span>Prompt</span>
+            <textarea id="chatInput" rows="7" placeholder="Опиши ролик обычным языком. Chat разберет промпт на параметры и соберет job."></textarea>
+          </label>
+
+          <div class="chat-actions">
+            <button class="action-button" id="sendPromptButton" type="button">
+              <span class="button-icon">&gt;</span><span>Analyze</span>
+            </button>
+            <button class="action-button action-primary" id="chatGenerateButton" type="button">
+              <span class="button-icon">*</span><span>Analyze + Generate</span>
+            </button>
+          </div>
+
+          <section class="summary-panel top-gap">
+            <div class="block-heading">
+              <h3>Plan Summary</h3>
+            </div>
+            <div class="summary-grid" id="planSummary"></div>
+            <div class="summary-notes" id="planNotes"></div>
+          </section>
+        </section>
+
+        <section class="workspace-section">
+          <div class="section-heading">
+            <h2>Jobs</h2>
+          </div>
+
+          <div class="job-list" id="jobList"></div>
+
+          <section class="result-panel top-gap">
+            <div class="block-heading">
+              <h3>Selected Job</h3>
+            </div>
+            <div class="job-summary" id="selectedJobSummary">Выбери job, чтобы посмотреть детали.</div>
+            <video id="resultVideo" class="media-preview" controls playsinline></video>
+            <img id="resultPreview" class="image-preview" alt="">
+            <audio id="resultVoice" controls></audio>
+            <audio id="resultMusic" controls></audio>
+            <div class="artifact-links" id="artifactLinks"></div>
+            <div class="inline-tools top-gap">
+              <button class="action-button mini-button is-hidden" id="toggleSceneTuningButton" type="button">
+                <span class="button-icon">=</span><span>Scene Tuning</span>
+              </button>
+            </div>
+          </section>
+        </section>
+      </main>
+
+      <section class="scene-panel is-hidden" id="sceneTuningPanel">
+        <div class="section-heading">
+          <h2>Scene Tuning</h2>
+          <div class="inline-tools">
+            <button class="action-button mini-button" id="reviseNowButton" type="button">
+              <span class="button-icon">&gt;</span><span>Create Revision</span>
+            </button>
+            <button class="action-button mini-button" id="queueRevisionButton" type="button">
+              <span class="button-icon">=</span><span>Queue Revision</span>
+            </button>
+            <button class="action-button mini-button" id="hideSceneTuningButton" type="button">
+              <span class="button-icon">x</span><span>Hide</span>
+            </button>
+          </div>
+        </div>
+        <p class="scene-note">Shot Overrides скрыты по умолчанию. Этот блок нужен только если после первой генерации ты хочешь руками поправить сцены.</p>
+        <div class="scene-grid" id="sceneTuningList"></div>
+      </section>
+    </div>
+  </body>
+</html>
