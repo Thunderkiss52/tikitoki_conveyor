@@ -4,6 +4,7 @@ from pathlib import Path
 from app.db.models import Job, Project
 from app.models.pipeline import MediaArtifact, ScriptPackage, ShotSpec
 from app.providers.tts.base import TTSProvider
+from app.utils.media import fit_audio_to_duration
 from app.utils.storage import to_workspace_path, write_text
 
 
@@ -47,17 +48,21 @@ class VoiceGenerationService:
         text: str,
         job_dirs: dict[str, Path],
     ) -> MediaArtifact:
+        raw_output_path = job_dirs["voice"] / f"scene_{shot.order:02d}.raw.wav"
         output_path = job_dirs["voice"] / f"scene_{shot.order:02d}.wav"
         self.provider.synthesize(
             text=text,
             voice_preset=str(project.config_json.get("voice_style", "neutral")),
-            output_path=output_path,
+            output_path=raw_output_path,
             config={
                 **job.config_json,
+                "language": job.language,
                 "duration_sec": shot.duration_sec,
                 "shot_order": shot.order,
             },
         )
+        fit_audio_to_duration(raw_output_path, output_path, shot.duration_sec)
+        raw_output_path.unlink(missing_ok=True)
         return MediaArtifact(
             path=to_workspace_path(output_path),
             metadata={"order": shot.order, "text": text},

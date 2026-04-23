@@ -1,4 +1,5 @@
 from app.providers.video.comfyui import ComfyUIVideoProvider
+from app.providers.video.reference import ReferenceVideoProvider
 from app.providers.video.stub import StubVideoProvider
 
 
@@ -14,6 +15,8 @@ def get_video_provider(name: str):
         "stub": StubVideoProvider,
         "synthetic": StubVideoProvider,
         "comfyui": ComfyUIVideoProvider,
+        "reference": ReferenceVideoProvider,
+        "remix": ReferenceVideoProvider,
         "runway": StubVideoProvider,
         "luma": StubVideoProvider,
     }

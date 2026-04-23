@@ -18,5 +18,10 @@
     "scene_roles": ["problem", "contrast", "solution", "cta"],
     "mood": "direct response",
     "prompt_style": "performance marketing short"
+  },
+  "fandom_reveal_parody": {
+    "scene_roles": ["hook_closeup", "contrast", "contrast", "reveal", "brand_punchline"],
+    "mood": "fandom parody reveal",
+    "prompt_style": "lo-fi cosplay meme with rapid reveal punchline"
   }
 }

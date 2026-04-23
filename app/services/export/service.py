@@ -59,6 +59,10 @@ class ExporterService:
         )
 
     def _target_resolution(self, project: Project, job: Job) -> tuple[int, int]:
+        explicit = str(job.config_json.get("export_resolution") or "").lower()
+        if "x" in explicit:
+            width, height = explicit.split("x", 1)
+            return int(width), int(height)
         aspect = job.config_json.get("aspect") or project.config_json.get("default_aspect", "9:16")
         if aspect == "16:9":
             return 1920, 1080

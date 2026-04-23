@@ -122,7 +122,14 @@ python scripts/run_local_hodor.py --provider stub
 
 ### 3. Режим `comfyui`
 
-Это production-путь. Сначала подними ComfyUI локально и экспортируй workflow в API format JSON.
+Это production-путь. Сначала подними ComfyUI локально.
+
+`ComfyUIVideoProvider` теперь умеет работать в двух режимах:
+
+- напрямую с `UI workflow JSON` из ComfyUI
+- с экспортированным `API workflow JSON`
+
+Для быстрого старта удобнее использовать уже готовые `UI workflows` из `workflows/comfyui_ui/`.
 
 #### Быстрый локальный ComfyUI stack
 
@@ -204,18 +211,77 @@ python3 scripts/prepare_helper_workflows.py \
 
 - `workflows/hodor_animdiff_api.json`
 
-И запусти:
+Минимальный production entrypoint под WSL2 + RTX 4060 теперь такой:
 
 ```bash
-python scripts/run_local_hodor.py \
-  --provider comfyui \
-  --workflow-path workflows/hodor_animdiff_api.json
+bash scripts/use_local_factory.sh \
+  --mode video_to_video \
+  --quality high \
+  --output-prefix hodor_product
 ```
+
+Что делает wrapper:
+
+- сам поднимает `ComfyUI` на GPU, если он еще не запущен
+- ждет `system_stats`
+- запускает factory runner без ручного `workflow-path`
+- после завершения гасит временно поднятый `ComfyUI`
+
+Если ноуту тяжело, используй щадящий режим:
+
+```bash
+bash scripts/use_local_factory.sh \
+  --safe-thermal \
+  --mode video_to_video \
+  --output-prefix hodor_safe
+```
+
+Что включает `--safe-thermal`:
+
+- добавляет `ComfyUI --lowvram`
+- если `--quality` не задан, опускает рендер до `standard`
+- пытается выставить `90%` power cap через Windows UAC
+
+Если хочешь поставить power cap отдельно:
+
+```bash
+bash scripts/set_gpu_power_limit.sh 90
+```
+
+Если `ComfyUI` уже поднят вручную, можно запускать напрямую:
+
+```bash
+PYTHONPATH=. ./.venv/bin/python scripts/run_local_hodor.py \
+  --provider comfyui \
+  --mode video_to_video \
+  --quality high \
+  --no-auto-start-comfyui
+```
+
+Доступные режимы:
+
+- `text_to_video`
+- `image_to_video`
+- `video_to_video`
+
+Доступные quality presets:
+
+- `draft`
+- `standard`
+- `high`
+- `ultra`
+
+Под RTX 4060 8GB основной рабочий preset сейчас `high`:
+
+- `576x1024`
+- `16 frames`
+- `24 steps`
+- `8 fps`
 
 Если у твоего workflow свои node ids, поправь mapping или передай свой:
 
 ```bash
-python scripts/run_local_hodor.py \
+PYTHONPATH=. ./.venv/bin/python scripts/run_local_hodor.py \
   --provider comfyui \
   --workflow-path workflows/hodor_animdiff_api.json \
   --workflow-mapping-path workflows/hodor_animdiff_mapping.json
@@ -224,9 +290,9 @@ python scripts/run_local_hodor.py \
 Если ComfyUI поднят не на `127.0.0.1:8188`:
 
 ```bash
-python scripts/run_local_hodor.py \
-  --provider comfyui \
-  --workflow-path workflows/hodor_animdiff_api.json \
+bash scripts/use_local_factory.sh \
+  --mode video_to_video \
+  --quality high \
   --comfyui-base-url http://127.0.0.1:8189
 ```
 
@@ -328,14 +394,19 @@ curl -X POST http://localhost:8000/api/v1/jobs \
 - `COMFYUI_BASE_URL`
 - `provider_settings.workflow_path`
 - `provider_settings.workflow_mapping`
+- `provider_settings.generation_mode`
+- `provider_settings.quality_preset`
 
 Провайдер умеет:
 
+- работать напрямую с `UI workflow JSON` из ComfyUI
+- работать с экспортированным `API workflow JSON`
 - отправлять workflow в `/prompt`
 - ждать completion по `/history/{prompt_id}`
 - скачивать итоговый `mp4/webm/mov/gif/image` через `/view`
 - конвертировать output в `clip_XX.mp4`
 - загружать reference image в ComfyUI через `/upload/image`
+- staging `reference_video` в `ComfyUI/input`
 - подставлять `prompt`, `negative_prompt`, `width`, `height`, `frames`, `steps`, `cfg`, `seed`, `fps`, `filename_prefix`
 
 Если `project.config.logo_path` задан, он автоматически передается в provider как `brand_image_path`.
@@ -426,5 +497,5 @@ curl -X POST http://localhost:8000/api/v1/jobs \
 
 - Trend analysis пока heuristic/template-based, не full CV
 - TTS сейчас без реальной речи
-- Настоящий video generation требует поднятого ComfyUI и workflow JSON в API format
+- Настоящий video generation требует поднятого ComfyUI, но уже поддерживает и `UI workflow`, и `API workflow`
 - Нет Alembic миграций и auth/admin UI

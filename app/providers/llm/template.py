@@ -45,6 +45,8 @@ class TemplateScriptProvider:
 
     def _select_template(self, topic: str, analysis: dict[str, Any]) -> str:
         combined_text = f"{topic} {analysis.get('mood', '')} {analysis.get('hook', '')}".lower()
+        if any(keyword in combined_text for keyword in ("harry", "potter", "fandom", "cosplay", "pop culture")):
+            return "fandom_reveal_parody"
         if any(keyword in combined_text for keyword in ("cat", "кот", "pet", "animal")):
             return "funny_pet_contrast"
         if any(keyword in combined_text for keyword in ("dark", "proxy", "cyber", "cinematic")):

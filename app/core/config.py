@@ -27,14 +27,19 @@ class Settings(BaseSettings):
     FFPROBE_BIN: str = "ffprobe"
 
     DEFAULT_VIDEO_PROVIDER: str = "comfyui"
-    DEFAULT_TTS_PROVIDER: str = "stub"
-    DEFAULT_MUSIC_PROVIDER: str = "library"
+    DEFAULT_TTS_PROVIDER: str = "piper"
+    DEFAULT_MUSIC_PROVIDER: str = "hybrid"
     DEFAULT_SCRIPT_PROVIDER: str = "template"
 
     COMFYUI_BASE_URL: str = "http://127.0.0.1:8188"
     COMFYUI_TIMEOUT_SEC: int = 600
     COMFYUI_POLL_INTERVAL_SEC: float = 2.0
     COMFYUI_WORKFLOW_TEMPLATE: str = "app/templates/comfyui/workflow_api.example.json"
+    COMFYUI_INPUT_DIR: str = "third_party/ComfyUI/input"
+
+    PIPER_BIN: str = "third_party/piper/piper/piper"
+    PIPER_MODEL_DIR: str = "storage/assets/voices/piper"
+    PIPER_DEFAULT_MODEL_RU: str = "storage/assets/voices/piper/ru_RU-dmitri-medium.onnx"
 
     DEFAULT_ASPECT: str = "9:16"
     DEFAULT_WIDTH: int = 1080

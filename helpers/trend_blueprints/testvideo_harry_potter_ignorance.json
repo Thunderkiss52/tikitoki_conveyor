@@ -1,0 +1,70 @@
+{
+  "title": "Harry Potter Ignorance Reveal",
+  "template": "fandom_reveal_parody",
+  "scene_count": 5,
+  "analysis": {
+    "hook": "recognizable cosplay silhouette with curiosity crop in the first seconds",
+    "beats": [
+      "hook_closeup",
+      "contrast",
+      "contrast",
+      "reveal",
+      "brand_punchline"
+    ],
+    "estimated_scene_count": 5,
+    "pace": "medium-fast",
+    "camera_style": "lo-fi selfie cosplay plus repeated medium shot plus tight face crop reveal",
+    "mood": "fandom parody reveal",
+    "references": {
+      "source_video": "testvideo.mp4",
+      "duration_sec": 21.1,
+      "segments": [
+        {
+          "label": "hook_character_pose",
+          "start_sec": 0.0,
+          "end_sec": 3.8,
+          "purpose": "instant recognition and curiosity"
+        },
+        {
+          "label": "cutaway_question_mark",
+          "start_sec": 3.8,
+          "end_sec": 6.87,
+          "purpose": "contrast cutaway that raises the question"
+        },
+        {
+          "label": "return_and_escalate",
+          "start_sec": 6.87,
+          "end_sec": 13.4,
+          "purpose": "repeat the main shot with a small prop or gesture change"
+        },
+        {
+          "label": "fandom_closeup_reveal",
+          "start_sec": 13.4,
+          "end_sec": 18.0,
+          "purpose": "tight pop culture face reveal"
+        },
+        {
+          "label": "rapid_punchline",
+          "start_sec": 18.0,
+          "end_sec": 21.1,
+          "purpose": "quick punchline on face detail and final recognition"
+        }
+      ],
+      "style_tags": [
+        "social_ui_capture",
+        "cosplay",
+        "bedroom_lofi",
+        "recognizable_fandom_anchor",
+        "reaction_reveal",
+        "rapid_face_crop"
+      ],
+      "adaptation_rules": [
+        "copy rhythm and reveal logic, not Harry Potter itself",
+        "keep a recognizable anchor in the first two seconds",
+        "use one repeated medium shot before the reveal",
+        "end on a tight crop or identity punchline",
+        "for branded remixes replace the final identity reveal with a product or brand reveal"
+      ]
+    }
+  }
+}

@@ -1,9 +1,11 @@
+from app.providers.tts.piper import PiperTTSProvider
 from app.providers.tts.stub import SilentTTSProvider
 
 
 def get_tts_provider(name: str):
     providers = {
         "stub": SilentTTSProvider,
+        "piper": PiperTTSProvider,
         "elevenlabs": SilentTTSProvider,
         "xtts": SilentTTSProvider,
     }

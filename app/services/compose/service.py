@@ -46,7 +46,7 @@ class ComposerService:
         self._write_subtitles(
             subtitles_path,
             shots,
-            script.voiceover if script.voiceover else script.overlays,
+            script.overlays if script.overlays else script.voiceover,
         )
 
         logo_path = None

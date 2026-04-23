@@ -19,6 +19,7 @@ DEFAULT_JOB_CONFIG = {
     "subtitles": True,
     "voiceover": True,
     "music_mode": "hybrid",
+    "quality_preset": "high",
 }
 
 

@@ -52,6 +52,8 @@ class TrendAnalyzerService:
                 ],
             )
         ).lower()
+        if any(keyword in combined_text for keyword in ("harry", "potter", "fandom", "cosplay", "wizard", "hogwarts")):
+            return "fandom parody reveal"
         if any(keyword in combined_text for keyword in ("dark", "proxy", "cyber", "telegram")):
             return "dark cyber tension"
         if any(keyword in combined_text for keyword in ("cat", "кот", "pet", "animal")):
@@ -59,6 +61,8 @@ class TrendAnalyzerService:
         return "comic contrast"
 
     def _infer_beats(self, scene_count: int, mood: str) -> list[str]:
+        if mood == "fandom parody reveal":
+            return ["hook_closeup", "contrast", "contrast", "reveal", "brand_punchline"][:scene_count]
         if scene_count >= 4:
             return ["problem", "contrast", "solution", "cta"][:scene_count]
         if mood == "dark cyber tension":

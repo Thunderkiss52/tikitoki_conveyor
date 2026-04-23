@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import mimetypes
 import shutil
@@ -11,8 +12,9 @@ from uuid import uuid4
 import httpx
 
 from app.core.config import settings
+from app.core.render_presets import build_comfyui_provider_settings
 from app.models.pipeline import ShotSpec
-from app.utils.media import convert_video_to_mp4, loop_image_to_video
+from app.utils.media import fit_video_to_duration, loop_image_to_video
 from app.utils.storage import resolve_local_path, safe_slug
 
 
@@ -20,22 +22,26 @@ class ComfyUIVideoProvider:
     VIDEO_EXTENSIONS = {".mp4", ".mov", ".webm", ".mkv"}
     IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".webp"}
     ANIMATED_EXTENSIONS = {".gif"}
+    SCALAR_INPUT_TYPES = {"INT", "FLOAT", "STRING", "BOOLEAN"}
 
     def __init__(self) -> None:
         self.base_url = settings.COMFYUI_BASE_URL.rstrip("/")
         self.timeout_sec = settings.COMFYUI_TIMEOUT_SEC
         self.poll_interval_sec = settings.COMFYUI_POLL_INTERVAL_SEC
         self.default_workflow_template = settings.COMFYUI_WORKFLOW_TEMPLATE
+        self.input_dir = resolve_local_path(settings.COMFYUI_INPUT_DIR)
+        self._object_info_cache: dict[str, dict[str, Any]] = {}
 
     def generate(self, shot_spec: ShotSpec, output_path: Path, config: dict[str, object]) -> Path:
-        provider_settings = dict(config.get("provider_settings") or {})
+        provider_settings = build_comfyui_provider_settings(overrides=dict(config.get("provider_settings") or {}))
         workflow_path = self._workflow_path(provider_settings)
-        workflow = json.loads(workflow_path.read_text(encoding="utf-8"))
+        raw_workflow = json.loads(workflow_path.read_text(encoding="utf-8"))
         client_id = str(uuid4())
 
         context = self._build_context(shot_spec, output_path, config, provider_settings)
         with httpx.Client(base_url=self.base_url, timeout=self.timeout_sec) as client:
-            uploads = self._upload_reference_images(client, provider_settings)
+            workflow = self._prepare_workflow(client, raw_workflow)
+            uploads = self._stage_reference_assets(client, provider_settings)
             self._apply_mapping(workflow, provider_settings.get("workflow_mapping"), {**context, **uploads})
             self._apply_heuristics(workflow, context, uploads)
 
@@ -59,10 +65,151 @@ class ComfyUIVideoProvider:
             )
         if explicit_workflow_path is None and path.name.endswith(".example.json"):
             raise ValueError(
-                "ComfyUI provider needs a real workflow JSON in API format. "
-                "Set provider_settings.workflow_path to your exported workflow file."
+                "ComfyUI provider needs either a real workflow JSON or a generation mode with prepared helper workflows. "
+                "Set provider_settings.workflow_path or provider_settings.generation_mode."
             )
         return path
+
+    def _prepare_workflow(self, client: httpx.Client, raw_workflow: dict[str, Any]) -> dict[str, Any]:
+        if self._looks_like_ui_workflow(raw_workflow):
+            return self._convert_ui_workflow_to_api(client, raw_workflow)
+        return raw_workflow
+
+    def _looks_like_ui_workflow(self, workflow: dict[str, Any]) -> bool:
+        return isinstance(workflow.get("nodes"), list) and isinstance(workflow.get("links"), list)
+
+    def _convert_ui_workflow_to_api(
+        self,
+        client: httpx.Client,
+        workflow: dict[str, Any],
+    ) -> dict[str, Any]:
+        links_by_id: dict[int, list[Any]] = {}
+        for raw_link in workflow.get("links", []):
+            if isinstance(raw_link, list) and len(raw_link) >= 5:
+                links_by_id[int(raw_link[0])] = raw_link
+
+        prompt: dict[str, Any] = {}
+        for node in sorted(workflow.get("nodes", []), key=lambda item: int(item.get("id", 0))):
+            node_id = str(node["id"])
+            class_type = str(node["type"])
+            schema = self._object_info(client, class_type)
+            inputs = self._convert_ui_node_inputs(node, links_by_id, schema)
+            prompt[node_id] = {"class_type": class_type, "inputs": inputs}
+
+            node_title = node.get("title") or node.get("properties", {}).get("Node name for S&R")
+            if node_title:
+                prompt[node_id]["_meta"] = {"title": str(node_title)}
+
+        return prompt
+
+    def _convert_ui_node_inputs(
+        self,
+        node: dict[str, Any],
+        links_by_id: dict[int, list[Any]],
+        schema: dict[str, Any],
+    ) -> dict[str, Any]:
+        inputs: dict[str, Any] = {}
+        connected_names: set[str] = set()
+
+        for raw_input in node.get("inputs", []):
+            link_id = raw_input.get("link")
+            input_name = raw_input.get("name")
+            if link_id is None or input_name is None:
+                continue
+
+            link = links_by_id.get(int(link_id))
+            if link is None:
+                raise KeyError(f"Workflow link {link_id} referenced by node {node.get('id')} was not found.")
+
+            connected_names.add(str(input_name))
+            inputs[str(input_name)] = [str(link[1]), int(link[2])]
+
+        widget_values = node.get("widgets_values")
+        hidden_inputs = set((schema.get("input", {}) or {}).get("hidden", {}))
+        valid_inputs = self._valid_schema_inputs(schema)
+
+        if isinstance(widget_values, dict):
+            for key, value in widget_values.items():
+                if key in valid_inputs or key in hidden_inputs:
+                    inputs[key] = self._normalize_widget_value(value)
+            return inputs
+
+        if not isinstance(widget_values, list):
+            return inputs
+
+        widget_index = 0
+        ordered_widget_inputs = self._ordered_widget_input_names(schema, connected_names)
+        for input_name in ordered_widget_inputs:
+            if widget_index >= len(widget_values):
+                break
+            inputs[input_name] = self._normalize_widget_value(widget_values[widget_index])
+            widget_index += 1
+            if self._has_control_after_generate(schema, input_name):
+                widget_index += 1
+
+        return inputs
+
+    def _object_info(self, client: httpx.Client, class_type: str) -> dict[str, Any]:
+        cached = self._object_info_cache.get(class_type)
+        if cached is not None:
+            return cached
+
+        response = client.get(f"/object_info/{class_type}")
+        response.raise_for_status()
+        payload = response.json()
+        schema = payload.get(class_type)
+        if not isinstance(schema, dict):
+            raise KeyError(f"ComfyUI object_info for {class_type} is missing or malformed.")
+        self._object_info_cache[class_type] = schema
+        return schema
+
+    def _valid_schema_inputs(self, schema: dict[str, Any]) -> set[str]:
+        input_payload = schema.get("input", {}) or {}
+        return set(input_payload.get("required", {})) | set(input_payload.get("optional", {}))
+
+    def _ordered_widget_input_names(self, schema: dict[str, Any], connected_names: set[str]) -> list[str]:
+        ordered: list[str] = []
+        input_payload = schema.get("input", {}) or {}
+        input_order = schema.get("input_order", {}) or {}
+
+        for category in ("required", "optional"):
+            category_payload = input_payload.get(category, {}) or {}
+            for input_name in input_order.get(category, []):
+                if input_name in connected_names:
+                    continue
+                if self._is_widget_input(category_payload.get(input_name)):
+                    ordered.append(input_name)
+
+        return ordered
+
+    def _is_widget_input(self, raw_info: Any) -> bool:
+        input_type, extra_info = self._parse_input_info(raw_info)
+        if isinstance(input_type, list):
+            return True
+        if input_type in self.SCALAR_INPUT_TYPES:
+            return True
+        return bool(extra_info.get("forceInput"))
+
+    def _has_control_after_generate(self, schema: dict[str, Any], input_name: str) -> bool:
+        input_payload = schema.get("input", {}) or {}
+        for category in ("required", "optional", "hidden"):
+            if input_name not in (input_payload.get(category, {}) or {}):
+                continue
+            _, extra_info = self._parse_input_info(input_payload[category][input_name])
+            return bool(extra_info.get("control_after_generate"))
+        return False
+
+    def _parse_input_info(self, raw_info: Any) -> tuple[Any, dict[str, Any]]:
+        if not isinstance(raw_info, list) or not raw_info:
+            return raw_info, {}
+        input_type = raw_info[0]
+        extra_info = raw_info[1] if len(raw_info) > 1 and isinstance(raw_info[1], dict) else {}
+        return input_type, extra_info
+
+    def _normalize_widget_value(self, value: Any) -> Any:
+        if isinstance(value, list):
+            return {"__value__": value}
+        return value
 
     def _build_context(
         self,
@@ -87,22 +234,28 @@ class ComfyUIVideoProvider:
             "scheduler": provider_settings.get("scheduler"),
             "denoise": self._coerce_float(provider_settings.get("denoise")),
             "filename_prefix": filename_prefix,
+            "generation_mode": provider_settings.get("generation_mode"),
+            "quality_preset": provider_settings.get("quality_preset"),
             "brand_image_path": (
                 provider_settings.get("brand_image_path")
                 or config.get("brand_image_path")
                 or provider_settings.get("reference_image_path")
             ),
+            "reference_video_path": provider_settings.get("reference_video_path"),
             "output_basename": output_path.stem,
         }
 
-    def _upload_reference_images(self, client: httpx.Client, provider_settings: dict[str, Any]) -> dict[str, str]:
+    def _stage_reference_assets(self, client: httpx.Client, provider_settings: dict[str, Any]) -> dict[str, str]:
         reference_images = dict(provider_settings.get("reference_images") or {})
+        reference_videos = dict(provider_settings.get("reference_videos") or {})
         if provider_settings.get("brand_image_path"):
             reference_images.setdefault("brand_image", provider_settings["brand_image_path"])
         if provider_settings.get("reference_image_path"):
             reference_images.setdefault("reference_image", provider_settings["reference_image_path"])
+        if provider_settings.get("reference_video_path"):
+            reference_videos.setdefault("reference_video", provider_settings["reference_video_path"])
 
-        uploaded: dict[str, str] = {}
+        staged: dict[str, str] = {}
         for alias, raw_path in reference_images.items():
             local_path = resolve_local_path(str(raw_path))
             if not local_path.exists():
@@ -117,8 +270,27 @@ class ComfyUIVideoProvider:
                 )
             response.raise_for_status()
             payload = response.json()
-            uploaded[alias] = payload.get("name") or local_path.name
-        return uploaded
+            staged[alias] = payload.get("name") or local_path.name
+
+        for alias, raw_path in reference_videos.items():
+            local_path = resolve_local_path(str(raw_path))
+            if not local_path.exists():
+                raise FileNotFoundError(f"Reference video not found: {local_path}")
+            staged[alias] = self._stage_local_input_file(local_path)
+
+        return staged
+
+    def _stage_local_input_file(self, local_path: Path) -> str:
+        self.input_dir.mkdir(parents=True, exist_ok=True)
+        stat = local_path.stat()
+        digest = hashlib.md5(
+            f"{local_path.resolve()}:{stat.st_size}:{stat.st_mtime_ns}".encode("utf-8")
+        ).hexdigest()[:8]
+        staged_name = f"{safe_slug(local_path.stem)}_{digest}{local_path.suffix.lower()}"
+        staged_path = self.input_dir / staged_name
+        if not staged_path.exists():
+            shutil.copy2(local_path, staged_path)
+        return staged_name
 
     def _queue_prompt(self, client: httpx.Client, workflow: dict[str, Any], client_id: str) -> str:
         response = client.post("/prompt", json={"prompt": workflow, "client_id": client_id})
@@ -199,18 +371,29 @@ class ComfyUIVideoProvider:
     ) -> Path:
         suffix = downloaded_path.suffix.lower()
         if suffix == output_path.suffix.lower():
-            shutil.move(str(downloaded_path), str(output_path))
-            return output_path
+            normalized = fit_video_to_duration(downloaded_path, output_path, shot_spec.duration_sec)
+            self._cleanup_intermediate(downloaded_path, output_path)
+            return normalized
 
         if suffix in self.VIDEO_EXTENSIONS or suffix in self.ANIMATED_EXTENSIONS:
-            return convert_video_to_mp4(downloaded_path, output_path)
+            normalized = fit_video_to_duration(downloaded_path, output_path, shot_spec.duration_sec)
+            self._cleanup_intermediate(downloaded_path, output_path)
+            return normalized
 
         if suffix in self.IMAGE_EXTENSIONS:
             width = int(context["width"])
             height = int(context["height"])
-            return loop_image_to_video(downloaded_path, output_path, shot_spec.duration_sec, width, height)
+            normalized = loop_image_to_video(downloaded_path, output_path, shot_spec.duration_sec, width, height)
+            self._cleanup_intermediate(downloaded_path, output_path)
+            return normalized
 
         raise RuntimeError(f"Unsupported ComfyUI output format: {downloaded_path.name}")
+
+    def _cleanup_intermediate(self, intermediate_path: Path, output_path: Path) -> None:
+        if intermediate_path.resolve() == output_path.resolve():
+            return
+        if intermediate_path.exists():
+            intermediate_path.unlink()
 
     def _apply_mapping(
         self,
@@ -253,6 +436,8 @@ class ComfyUIVideoProvider:
             inputs = node.get("inputs", {})
             self._set_scalar_if_present(inputs, "width", context.get("width"))
             self._set_scalar_if_present(inputs, "height", context.get("height"))
+            self._set_scalar_if_present(inputs, "custom_width", context.get("width"))
+            self._set_scalar_if_present(inputs, "custom_height", context.get("height"))
             self._set_scalar_if_present(inputs, "steps", context.get("steps"))
             self._set_scalar_if_present(inputs, "cfg", context.get("cfg"))
             self._set_scalar_if_present(inputs, "seed", context.get("seed"))
@@ -261,13 +446,19 @@ class ComfyUIVideoProvider:
             self._set_scalar_if_present(inputs, "denoise", context.get("denoise"))
             self._set_scalar_if_present(inputs, "frame_rate", context.get("fps"))
             self._set_scalar_if_present(inputs, "fps", context.get("fps"))
+            self._set_scalar_if_present(inputs, "force_rate", context.get("fps"))
             self._set_scalar_if_present(inputs, "filename_prefix", context.get("filename_prefix"))
 
-            for frame_key in ("frames", "length", "video_length", "frame_count", "batch_size"):
+            for frame_key in ("frames", "length", "video_length", "frame_count", "batch_size", "frame_load_cap"):
                 self._set_scalar_if_present(inputs, frame_key, context.get("frames"))
 
-        for upload_name in uploads.values():
-            self._inject_uploaded_image(nodes, upload_name)
+        reference_image = uploads.get("reference_image") or uploads.get("brand_image")
+        if reference_image:
+            self._inject_uploaded_image(nodes, reference_image)
+
+        reference_video = uploads.get("reference_video")
+        if reference_video:
+            self._inject_uploaded_video(nodes, reference_video)
 
     def _inject_uploaded_image(self, nodes: list[tuple[str, dict[str, Any]]], uploaded_name: str) -> None:
         for _, node in nodes:
@@ -275,7 +466,13 @@ class ComfyUIVideoProvider:
             inputs = node.get("inputs", {})
             if "loadimage" in class_type and isinstance(inputs.get("image"), str):
                 inputs["image"] = uploaded_name
-                return
+
+    def _inject_uploaded_video(self, nodes: list[tuple[str, dict[str, Any]]], uploaded_name: str) -> None:
+        for _, node in nodes:
+            class_type = str(node.get("class_type", "")).lower()
+            inputs = node.get("inputs", {})
+            if "loadvideo" in class_type and isinstance(inputs.get("video"), str):
+                inputs["video"] = uploaded_name
 
     def _set_first_text_input(self, node: dict[str, Any], value: str) -> None:
         inputs = node.get("inputs", {})
