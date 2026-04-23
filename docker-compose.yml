@@ -3,6 +3,7 @@ version: '3.8'
 services:
   db:
     image: postgres:15-alpine
+    restart: unless-stopped
     volumes:
       - postgres_data:/var/lib/postgresql/data
     environment:
@@ -11,14 +12,26 @@ services:
       - POSTGRES_DB=tikitoki
     ports:
       - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d tikitoki"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
 
   redis:
     image: redis:7-alpine
+    restart: unless-stopped
     ports:
       - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
 
   api:
     build: .
+    restart: unless-stopped
     volumes:
       - .:/app
       - ./storage:/app/storage
@@ -29,11 +42,14 @@ services:
     ports:
       - "8000:8000"
     depends_on:
-      - db
-      - redis
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
 
   worker:
     build: .
+    restart: unless-stopped
     command: python -m app.workers.worker
     volumes:
       - .:/app
@@ -43,8 +59,10 @@ services:
       - REDIS_URL=redis://redis:6379/0
       - STORAGE_BASE_PATH=storage
     depends_on:
-      - redis
-      - db
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
 
 volumes:
   postgres_data:
