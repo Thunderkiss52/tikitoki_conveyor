@@ -38,11 +38,11 @@ services:
       REDIS_URL: redis://redis:6379/0
       JOB_QUEUE_NAME: ${DOCKER_JOB_QUEUE_NAME:-video_jobs}
       STORAGE_BASE_PATH: /app/storage
-      DEFAULT_VIDEO_PROVIDER: ${DOCKER_DEFAULT_VIDEO_PROVIDER:-reference}
+      DEFAULT_VIDEO_PROVIDER: ${DOCKER_DEFAULT_VIDEO_PROVIDER:-comfyui}
       DEFAULT_TTS_PROVIDER: ${DOCKER_DEFAULT_TTS_PROVIDER:-stub}
       DEFAULT_MUSIC_PROVIDER: ${DOCKER_DEFAULT_MUSIC_PROVIDER:-library}
       DEFAULT_SCRIPT_PROVIDER: ${DOCKER_DEFAULT_SCRIPT_PROVIDER:-template}
-      TEXT_ONLY_VIDEO_PROVIDER: ${DOCKER_TEXT_ONLY_VIDEO_PROVIDER:-synthetic}
+      TEXT_ONLY_VIDEO_PROVIDER: ${DOCKER_TEXT_ONLY_VIDEO_PROVIDER:-comfyui}
       COMFYUI_BASE_URL: ${DOCKER_COMFYUI_BASE_URL:-http://host.docker.internal:8188}
       COMFYUI_INPUT_DIR: /app/third_party/ComfyUI/input
       PIPER_BIN: /app/third_party/piper/piper/piper
@@ -52,7 +52,7 @@ services:
       OPENAI_PROMPT_TIMEOUT_SEC: ${OPENAI_PROMPT_TIMEOUT_SEC:-30}
       OPENAI_PROMPT_REASONING_EFFORT: ${OPENAI_PROMPT_REASONING_EFFORT:-low}
     ports:
-      - "${DOCKER_APP_PORT:-8000}:8000"
+      - "${DOCKER_APP_PORT:-8010}:8000"
     extra_hosts:
       - "host.docker.internal:host-gateway"
     depends_on:
@@ -81,11 +81,11 @@ services:
       REDIS_URL: redis://redis:6379/0
       JOB_QUEUE_NAME: ${DOCKER_JOB_QUEUE_NAME:-video_jobs}
       STORAGE_BASE_PATH: /app/storage
-      DEFAULT_VIDEO_PROVIDER: ${DOCKER_DEFAULT_VIDEO_PROVIDER:-reference}
+      DEFAULT_VIDEO_PROVIDER: ${DOCKER_DEFAULT_VIDEO_PROVIDER:-comfyui}
       DEFAULT_TTS_PROVIDER: ${DOCKER_DEFAULT_TTS_PROVIDER:-stub}
       DEFAULT_MUSIC_PROVIDER: ${DOCKER_DEFAULT_MUSIC_PROVIDER:-library}
       DEFAULT_SCRIPT_PROVIDER: ${DOCKER_DEFAULT_SCRIPT_PROVIDER:-template}
-      TEXT_ONLY_VIDEO_PROVIDER: ${DOCKER_TEXT_ONLY_VIDEO_PROVIDER:-synthetic}
+      TEXT_ONLY_VIDEO_PROVIDER: ${DOCKER_TEXT_ONLY_VIDEO_PROVIDER:-comfyui}
       COMFYUI_BASE_URL: ${DOCKER_COMFYUI_BASE_URL:-http://host.docker.internal:8188}
       COMFYUI_INPUT_DIR: /app/third_party/ComfyUI/input
       PIPER_BIN: /app/third_party/piper/piper/piper

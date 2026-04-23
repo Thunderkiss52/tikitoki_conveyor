@@ -30,13 +30,14 @@ class Settings(BaseSettings):
     DEFAULT_TTS_PROVIDER: str = "piper"
     DEFAULT_MUSIC_PROVIDER: str = "hybrid"
     DEFAULT_SCRIPT_PROVIDER: str = "template"
-    TEXT_ONLY_VIDEO_PROVIDER: str = "synthetic"
+    TEXT_ONLY_VIDEO_PROVIDER: str = "comfyui"
 
     COMFYUI_BASE_URL: str = "http://127.0.0.1:8188"
     COMFYUI_TIMEOUT_SEC: int = 600
     COMFYUI_POLL_INTERVAL_SEC: float = 2.0
     COMFYUI_WORKFLOW_TEMPLATE: str = "app/templates/comfyui/workflow_api.example.json"
     COMFYUI_INPUT_DIR: str = "third_party/ComfyUI/input"
+    COMFYUI_DEFAULT_QUALITY_PRESET: str = "draft"
 
     PIPER_BIN: str = "third_party/piper/piper/piper"
     PIPER_MODEL_DIR: str = "storage/assets/voices/piper"

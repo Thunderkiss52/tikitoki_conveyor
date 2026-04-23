@@ -92,6 +92,7 @@ async def get_ui_options() -> dict[str, object]:
                 "scene_count": settings.DEFAULT_SCENE_COUNT,
                 "aspect": settings.DEFAULT_ASPECT,
                 "export_resolution": "",
+                "quality_preset": settings.COMFYUI_DEFAULT_QUALITY_PRESET,
             },
         },
         "templates": templates,
@@ -219,7 +220,7 @@ async def generate_from_prompt(
     plan = service.apply_draft_overrides(payload.plan, payload.draft, assets)
     unique_project_name = await _unique_project_name(session, plan.project_name)
     plan = plan.model_copy(update={"project_name": unique_project_name})
-    shot_overrides = service.build_shot_overrides(plan, assets, payload.shot_overrides)
+    shot_overrides = service.build_shot_overrides(plan, assets, payload.draft, payload.shot_overrides)
 
     try:
         project = await ProjectService.create(session, ProjectCreate.model_validate(service.create_project_payload(plan, assets)))
@@ -228,6 +229,7 @@ async def generate_from_prompt(
             service.create_job_payload(
                 plan=plan,
                 assets=assets,
+                draft=payload.draft,
                 project_id=project.id,
                 trend_source_id=trend_source.id,
                 shot_overrides=shot_overrides,
@@ -238,6 +240,8 @@ async def generate_from_prompt(
         job = await JobService.create(session, job_payload)
     except FileNotFoundError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
 
     job_id = job.id
     if payload.enqueue:

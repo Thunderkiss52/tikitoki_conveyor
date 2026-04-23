@@ -21,7 +21,7 @@ class VideoGenerationService:
             "project_name": project.name,
             "brand_image_path": project.config_json.get("logo_path"),
             "negative_prompt": shot.metadata.get("negative_prompt", ""),
-            "provider_settings": self._provider_settings(shot, trend_source_path),
+            "provider_settings": self._provider_settings(job, shot, trend_source_path),
         }
 
         if max_parallel == 1:
@@ -64,9 +64,20 @@ class VideoGenerationService:
             return None
         return getattr(trend_source, "source_path", None)
 
-    def _provider_settings(self, shot: ShotSpec, trend_source_path: str | None) -> dict[str, object]:
-        provider_settings = dict(shot.metadata.get("provider_settings", {}))
+    def _provider_settings(self, job: Job, shot: ShotSpec, trend_source_path: str | None) -> dict[str, object]:
+        provider_settings = dict(job.config_json.get("provider_settings", {}))
+        provider_settings.update(dict(shot.metadata.get("provider_settings", {})))
+        if job.config_json.get("quality_preset") and "quality_preset" not in provider_settings:
+            provider_settings["quality_preset"] = job.config_json["quality_preset"]
         if trend_source_path:
             provider_settings.setdefault("trend_video_path", trend_source_path)
             provider_settings.setdefault("reference_video_path", trend_source_path)
+        generation_mode = str(provider_settings.get("generation_mode") or "").strip().lower()
+        if generation_mode == "text_to_video":
+            provider_settings.pop("reference_image_path", None)
+            provider_settings.pop("reference_video_path", None)
+        elif generation_mode == "image_to_video":
+            provider_settings.pop("reference_video_path", None)
+        elif generation_mode == "video_to_video":
+            provider_settings.pop("reference_image_path", None)
         return provider_settings

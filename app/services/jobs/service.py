@@ -19,7 +19,7 @@ DEFAULT_JOB_CONFIG = {
     "subtitles": True,
     "voiceover": True,
     "music_mode": "hybrid",
-    "quality_preset": "high",
+    "quality_preset": settings.COMFYUI_DEFAULT_QUALITY_PRESET,
 }
 
 

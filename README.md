@@ -70,7 +70,7 @@ cp .env.example .env
 docker-compose up --build
 ```
 
-API будет на `http://localhost:8000`, Swagger на `http://localhost:8000/docs`, UI на `http://localhost:8000/ui/`.
+API будет на `http://localhost:8010`, Swagger на `http://localhost:8010/docs`, UI на `http://localhost:8010/ui/`.
 
 Если хочешь, чтобы prompt parsing шел через ChatGPT API, задай:
 
@@ -89,10 +89,10 @@ export OPENAI_PROMPT_MODEL=gpt-5.4-mini
 - API стартует без `--reload`
 - UI раздается тем же FastAPI контейнером
 
-Если `8000` занят, подними стек на другом порту:
+Если `8010` занят, подними стек на другом порту:
 
 ```bash
-DOCKER_APP_PORT=8010 docker compose up --build
+DOCKER_APP_PORT=8020 docker compose up --build
 ```
 
 ### Локально
@@ -162,6 +162,8 @@ python scripts/run_local_hodor.py --provider stub
 ./scripts/install_comfyui_stack.sh
 ./scripts/start_comfyui.sh
 ```
+
+`start_comfyui.sh` по умолчанию теперь слушает `0.0.0.0:8188`, чтобы Docker-контейнеры могли достучаться до локального ComfyUI через `host.docker.internal`.
 
 `start_comfyui.sh` сам включает `--cpu`, если `torch.cuda.is_available()` вернул `False`. Если хочешь явно зафиксировать режим:
 
@@ -350,7 +352,7 @@ python scripts/run_local_hodor.py \
 
 URL:
 
-- `http://localhost:8000/ui/`
+- `http://localhost:8010/ui/`
 
 ## Основные API endpoints
 
@@ -373,7 +375,7 @@ URL:
 ### 1. Создать проект
 
 ```bash
-curl -X POST http://localhost:8000/api/v1/projects \
+curl -X POST http://localhost:8010/api/v1/projects \
   -H "Content-Type: application/json" \
   -d '{
     "name": "HODOR",
@@ -389,7 +391,7 @@ curl -X POST http://localhost:8000/api/v1/projects \
 ### 2. Зарегистрировать трендовый ролик
 
 ```bash
-curl -X POST http://localhost:8000/api/v1/trends \
+curl -X POST http://localhost:8010/api/v1/trends \
   -H "Content-Type: application/json" \
   -d '{
     "type": "video",
@@ -401,7 +403,7 @@ curl -X POST http://localhost:8000/api/v1/trends \
 Или загрузить файл:
 
 ```bash
-curl -X POST http://localhost:8000/api/v1/trends/upload \
+curl -X POST http://localhost:8010/api/v1/trends/upload \
   -F "file=@/absolute/path/to/door_cat.mp4" \
   -F "hook_description=person fails, cat succeeds"
 ```
@@ -409,7 +411,7 @@ curl -X POST http://localhost:8000/api/v1/trends/upload \
 ### 3. Создать и сразу прогнать job
 
 ```bash
-curl -X POST http://localhost:8000/api/v1/jobs \
+curl -X POST http://localhost:8010/api/v1/jobs \
   -H "Content-Type: application/json" \
   -d '{
     "project_id": "project_xxx",

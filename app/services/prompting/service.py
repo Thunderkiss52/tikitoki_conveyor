@@ -9,6 +9,7 @@ from pydantic import BaseModel, Field
 
 from app.core.config import settings
 from app.core.enums import GenerationMode, TrendSourceType
+from app.core.render_presets import build_comfyui_provider_settings, normalize_generation_mode, normalize_quality_preset
 from app.providers.llm.template import TemplateScriptProvider
 from app.schemas.ui_prompt import (
     PromptAssetSelection,
@@ -140,14 +141,15 @@ class PromptPlanningService:
         self,
         plan: PromptPlan,
         assets: PromptAssetSelection,
+        draft: PromptGenerationDraft,
         manual_overrides: list[SimplifiedShotOverride],
     ) -> list[dict[str, Any]]:
         if manual_overrides:
-            return self._manual_shot_overrides(plan, assets, manual_overrides)
+            return self._manual_shot_overrides(plan, assets, draft, manual_overrides)
         if assets.reference_video_path and assets.images:
-            return self._mixed_reference_and_images(plan, assets)
+            return self._mixed_reference_and_images(plan, assets, draft)
         if assets.images:
-            return self._image_sequence_shots(plan, assets)
+            return self._image_sequence_shots(plan, assets, draft)
         return []
 
     def build_prompt_inputs(self, plan: PromptPlan, assets: PromptAssetSelection) -> dict[str, Any]:
@@ -201,24 +203,28 @@ class PromptPlanningService:
         self,
         plan: PromptPlan,
         assets: PromptAssetSelection,
+        draft: PromptGenerationDraft,
         project_id: str,
         trend_source_id: str,
         shot_overrides: list[dict[str, Any]],
         enqueue: bool,
         run_now: bool,
     ) -> dict[str, Any]:
-        video_provider = self._video_provider_for_assets(assets)
+        video_provider = self._video_provider_for_assets()
+        provider_settings = self._job_provider_settings(plan, assets, draft)
+        quality_preset = str(provider_settings.get("quality_preset") or settings.COMFYUI_DEFAULT_QUALITY_PRESET)
         config_json: dict[str, Any] = {
             "video_provider": video_provider,
             "tts_provider": settings.DEFAULT_TTS_PROVIDER,
             "music_provider": settings.DEFAULT_MUSIC_PROVIDER,
             "script_provider": settings.DEFAULT_SCRIPT_PROVIDER,
-            "allow_synthetic_video": video_provider in {"stub", "synthetic"},
+            "allow_synthetic_video": False,
             "brand_overlay": bool(plan.brand_overlay and assets.logo_path),
             "subtitles": plan.subtitles,
             "voiceover": plan.voiceover,
             "music_mode": "library",
-            "quality_preset": "high",
+            "quality_preset": quality_preset,
+            "provider_settings": provider_settings,
             "aspect": plan.aspect,
             "export_resolution": plan.export_resolution or "",
             "template": plan.template,
@@ -486,12 +492,13 @@ class PromptPlanningService:
         self,
         plan: PromptPlan,
         assets: PromptAssetSelection,
+        draft: PromptGenerationDraft,
         overrides: list[SimplifiedShotOverride],
     ) -> list[dict[str, Any]]:
         items: list[dict[str, Any]] = []
         fallback_images = list(assets.images)
+        quality_preset = self._quality_preset_for_draft(draft)
         for index, override in enumerate(overrides, start=1):
-            provider_settings: dict[str, Any] = {}
             source_kind = (override.source_kind or "").strip()
             source_path = override.source_path or None
             reference_image_path = override.reference_image_path or None
@@ -512,14 +519,17 @@ class PromptPlanningService:
                 source_path = fallback_images[(index - 1) % len(fallback_images)]
                 reference_image_path = source_path
 
+            provider_settings = self._shot_provider_settings(
+                source_kind=source_kind,
+                quality_preset=quality_preset,
+                reference_image_path=reference_image_path,
+                reference_video_path=reference_video_path,
+                logo_path=assets.logo_path,
+            )
             if source_kind and source_kind != "generated":
                 provider_settings["source_kind"] = source_kind
             if source_path and source_kind != "generated":
                 provider_settings["source_path"] = source_path
-            if reference_image_path:
-                provider_settings["reference_image_path"] = reference_image_path
-            if reference_video_path:
-                provider_settings["reference_video_path"] = reference_video_path
             if override.source_start_sec is not None:
                 provider_settings["source_start_sec"] = override.source_start_sec
             if override.source_duration_sec is not None:
@@ -541,11 +551,17 @@ class PromptPlanningService:
             )
         return items
 
-    def _image_sequence_shots(self, plan: PromptPlan, assets: PromptAssetSelection) -> list[dict[str, Any]]:
+    def _image_sequence_shots(
+        self,
+        plan: PromptPlan,
+        assets: PromptAssetSelection,
+        draft: PromptGenerationDraft,
+    ) -> list[dict[str, Any]]:
         image_paths = list(assets.images)
         if not image_paths:
             return []
         durations = self._split_duration(plan.duration_sec, plan.scene_count)
+        quality_preset = self._quality_preset_for_draft(draft)
         items: list[dict[str, Any]] = []
         for index in range(plan.scene_count):
             image_path = image_paths[index % len(image_paths)]
@@ -559,9 +575,14 @@ class PromptPlanningService:
                     "motion": "slow push-in",
                     "transition": "cut",
                     "provider_settings": {
+                        **self._shot_provider_settings(
+                            source_kind="image_to_video",
+                            quality_preset=quality_preset,
+                            reference_image_path=image_path,
+                            logo_path=assets.logo_path,
+                        ),
                         "source_kind": "image_to_video",
                         "source_path": image_path,
-                        "reference_image_path": image_path,
                         "fade_in_sec": 0.18 if index == 0 else 0.0,
                         "fade_out_sec": 0.18 if index == plan.scene_count - 1 else 0.0,
                         "image_scale": 0.72,
@@ -571,12 +592,18 @@ class PromptPlanningService:
             )
         return items
 
-    def _mixed_reference_and_images(self, plan: PromptPlan, assets: PromptAssetSelection) -> list[dict[str, Any]]:
+    def _mixed_reference_and_images(
+        self,
+        plan: PromptPlan,
+        assets: PromptAssetSelection,
+        draft: PromptGenerationDraft,
+    ) -> list[dict[str, Any]]:
         if not assets.reference_video_path or not assets.images:
             return []
         if plan.scene_count < 2:
             return []
 
+        quality_preset = self._quality_preset_for_draft(draft)
         reference_duration = self._reference_duration(assets.reference_video_path) or float(plan.duration_sec)
         final_image_duration = min(max(round(plan.duration_sec * 0.25, 2), 2.0), 4.0)
         video_total_duration = max(round(plan.duration_sec - final_image_duration, 2), 1.0)
@@ -598,9 +625,14 @@ class PromptPlanningService:
                     "motion": "slight handheld",
                     "transition": "cut",
                     "provider_settings": {
+                        **self._shot_provider_settings(
+                            source_kind="video",
+                            quality_preset=quality_preset,
+                            reference_video_path=assets.reference_video_path,
+                            logo_path=assets.logo_path,
+                        ),
                         "source_kind": "video",
                         "source_path": assets.reference_video_path,
-                        "reference_video_path": assets.reference_video_path,
                         "source_start_sec": round(source_cursor, 2),
                         "source_duration_sec": source_duration,
                         "speed": 1.0,
@@ -621,9 +653,14 @@ class PromptPlanningService:
                 "motion": "slow push-in",
                 "transition": "fade",
                 "provider_settings": {
+                    **self._shot_provider_settings(
+                        source_kind="image_to_video",
+                        quality_preset=quality_preset,
+                        reference_image_path=reveal_image,
+                        logo_path=assets.logo_path,
+                    ),
                     "source_kind": "image_to_video",
                     "source_path": reveal_image,
-                    "reference_image_path": reveal_image,
                     "fade_in_sec": 0.12,
                     "fade_out_sec": 0.18,
                     "image_scale": 0.68,
@@ -650,10 +687,102 @@ class PromptPlanningService:
         voice_line = self._line_for_index(plan.voiceover_lines, index, plan.topic)
         return f"{plan.topic}, {plan.visual_style}, {voice_line}".strip(", ")
 
-    def _video_provider_for_assets(self, assets: PromptAssetSelection) -> str:
-        if assets.reference_video_path or assets.images:
-            return "reference"
-        return settings.TEXT_ONLY_VIDEO_PROVIDER
+    def _video_provider_for_assets(self) -> str:
+        return "comfyui"
+
+    def _job_provider_settings(
+        self,
+        plan: PromptPlan,
+        assets: PromptAssetSelection,
+        draft: PromptGenerationDraft,
+    ) -> dict[str, Any]:
+        return self._build_comfyui_settings(
+            generation_mode=self._generation_mode_for_assets(assets, draft),
+            quality_preset=self._quality_preset_for_draft(draft),
+            reference_image_path=assets.images[0] if assets.images else None,
+            reference_video_path=assets.reference_video_path,
+            logo_path=assets.logo_path,
+        )
+
+    def _shot_provider_settings(
+        self,
+        *,
+        source_kind: str | None,
+        quality_preset: str,
+        reference_image_path: str | None = None,
+        reference_video_path: str | None = None,
+        logo_path: str | None = None,
+    ) -> dict[str, Any]:
+        generation_mode = self._generation_mode_for_source(
+            source_kind=source_kind,
+            reference_image_path=reference_image_path,
+            reference_video_path=reference_video_path,
+        )
+        return self._build_comfyui_settings(
+            generation_mode=generation_mode,
+            quality_preset=quality_preset,
+            reference_image_path=reference_image_path,
+            reference_video_path=reference_video_path,
+            logo_path=logo_path,
+        )
+
+    def _build_comfyui_settings(
+        self,
+        *,
+        generation_mode: str,
+        quality_preset: str,
+        reference_image_path: str | None = None,
+        reference_video_path: str | None = None,
+        logo_path: str | None = None,
+    ) -> dict[str, Any]:
+        overrides: dict[str, Any] = {}
+        if reference_image_path:
+            overrides["reference_image_path"] = reference_image_path
+        if reference_video_path:
+            overrides["reference_video_path"] = reference_video_path
+        if logo_path:
+            overrides["brand_image_path"] = logo_path
+        return build_comfyui_provider_settings(
+            mode=generation_mode,
+            quality=quality_preset,
+            overrides=overrides,
+        )
+
+    def _generation_mode_for_assets(self, assets: PromptAssetSelection, draft: PromptGenerationDraft) -> str:
+        requested_mode = (draft.generation_mode or "auto").strip().lower().replace("-", "_")
+        if requested_mode in {"", "auto"}:
+            if assets.reference_video_path:
+                return "video_to_video"
+            if assets.images:
+                return "image_to_video"
+            return "text_to_video"
+
+        resolved_mode = normalize_generation_mode(requested_mode)
+        if resolved_mode == "video_to_video" and not assets.reference_video_path:
+            raise ValueError("Для video-to-video сначала загрузи reference video.")
+        if resolved_mode == "image_to_video" and not assets.images:
+            raise ValueError("Для image-to-video сначала загрузи хотя бы одну картинку.")
+        return resolved_mode
+
+    def _quality_preset_for_draft(self, draft: PromptGenerationDraft) -> str:
+        if bool(draft.safe_laptop_mode):
+            return "draft"
+        raw_value = (draft.quality_preset or settings.COMFYUI_DEFAULT_QUALITY_PRESET).strip().lower()
+        return normalize_quality_preset(raw_value)
+
+    def _generation_mode_for_source(
+        self,
+        *,
+        source_kind: str | None,
+        reference_image_path: str | None,
+        reference_video_path: str | None,
+    ) -> str:
+        normalized = (source_kind or "").strip().lower()
+        if normalized in {"video", "reference_video", "video_to_video"} or reference_video_path:
+            return "video_to_video"
+        if normalized in {"image", "brand", "image_to_video"} or reference_image_path:
+            return "image_to_video"
+        return "text_to_video"
 
     def _line_for_index(self, lines: list[str], index: int, fallback: str) -> str:
         if 0 <= index < len(lines) and lines[index].strip():

@@ -46,6 +46,9 @@ class PromptGenerationDraft(BaseModel):
     subtitles: bool | None = None
     voiceover: bool | None = None
     brand_overlay: bool | None = None
+    generation_mode: str | None = None
+    quality_preset: str | None = None
+    safe_laptop_mode: bool | None = None
 
 
 class SimplifiedShotOverride(BaseModel):

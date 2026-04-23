@@ -36,12 +36,15 @@ const ids = {
   aspectInput: document.getElementById("aspectInput"),
   languageInput: document.getElementById("languageInput"),
   platformInput: document.getElementById("platformInput"),
+  generationModeInput: document.getElementById("generationModeInput"),
+  qualityPresetInput: document.getElementById("qualityPresetInput"),
   ctaInput: document.getElementById("ctaInput"),
   resolutionInput: document.getElementById("resolutionInput"),
   titleInput: document.getElementById("titleInput"),
   subtitlesToggle: document.getElementById("subtitlesToggle"),
   voiceoverToggle: document.getElementById("voiceoverToggle"),
   brandOverlayToggle: document.getElementById("brandOverlayToggle"),
+  safeLaptopModeToggle: document.getElementById("safeLaptopModeToggle"),
   planPromptButton: document.getElementById("planPromptButton"),
   clearChatButton: document.getElementById("clearChatButton"),
   sendPromptButton: document.getElementById("sendPromptButton"),
@@ -134,13 +137,43 @@ function formatDate(value) {
 function setDefaults() {
   if (!state.options) return;
   const defaults = state.options.defaults?.job || {};
+  populateRenderControls();
   if (!ids.durationInput.value) ids.durationInput.value = String(defaults.duration_sec || 8);
   if (!ids.aspectInput.value) ids.aspectInput.value = defaults.aspect || "9:16";
   if (!ids.languageInput.value) ids.languageInput.value = defaults.language || "ru";
   if (!ids.platformInput.value) ids.platformInput.value = defaults.target_platform || "tiktok";
+  if (!ids.generationModeInput.value) ids.generationModeInput.value = "auto";
+  if (!ids.qualityPresetInput.value) ids.qualityPresetInput.value = defaults.quality_preset || "draft";
   ids.subtitlesToggle.checked = Boolean(defaults.subtitles ?? true);
   ids.voiceoverToggle.checked = Boolean(defaults.voiceover ?? true);
   ids.brandOverlayToggle.checked = Boolean(defaults.brand_overlay ?? true);
+  if (ids.safeLaptopModeToggle.checked === false) {
+    ids.safeLaptopModeToggle.checked = (defaults.quality_preset || "draft") === "draft";
+  }
+  syncSafeLaptopMode();
+}
+
+function populateRenderControls() {
+  const renderPresets = state.options?.render_presets || {};
+  const generationModes = Array.isArray(renderPresets.generation_modes) ? renderPresets.generation_modes : [];
+  const qualityPresets = Array.isArray(renderPresets.quality_presets) ? renderPresets.quality_presets : [];
+
+  ids.generationModeInput.innerHTML = [
+    '<option value="auto">auto</option>',
+    ...generationModes.map((mode) => `<option value="${escapeHtml(mode)}">${escapeHtml(mode)}</option>`),
+  ].join("");
+
+  ids.qualityPresetInput.innerHTML = qualityPresets
+    .map((preset) => `<option value="${escapeHtml(preset)}">${escapeHtml(preset)}</option>`)
+    .join("");
+}
+
+function syncSafeLaptopMode() {
+  const safeMode = ids.safeLaptopModeToggle.checked;
+  ids.qualityPresetInput.disabled = safeMode;
+  if (safeMode) {
+    ids.qualityPresetInput.value = "draft";
+  }
 }
 
 function collectDraftPayload() {
@@ -156,6 +189,9 @@ function collectDraftPayload() {
     subtitles: ids.subtitlesToggle.checked,
     voiceover: ids.voiceoverToggle.checked,
     brand_overlay: ids.brandOverlayToggle.checked,
+    generation_mode: ids.generationModeInput.value || null,
+    quality_preset: ids.qualityPresetInput.value || null,
+    safe_laptop_mode: ids.safeLaptopModeToggle.checked,
   };
 }
 
@@ -283,6 +319,8 @@ function renderPlanSummary() {
     ["Voice Style", plan.voice_style],
     ["Music Style", plan.music_style],
     ["Timeline", `${plan.duration_sec}s / ${plan.scene_count} scenes / ${plan.aspect}`],
+    ["Generation Mode", ids.generationModeInput.value || "auto"],
+    ["Quality", ids.safeLaptopModeToggle.checked ? "draft (safe laptop mode)" : (ids.qualityPresetInput.value || "draft")],
     ["Parser", plan.parser],
     ["Topic", plan.topic],
     ["Overlay Lines", Array.isArray(plan.overlay_lines) ? plan.overlay_lines.join(" | ") : ""],
@@ -446,7 +484,7 @@ function renderStatus() {
   }
   const runtime = state.options?.runtime;
   ids.runtimeStatusChip.textContent = runtime
-    ? `Runtime: text-only -> ${runtime.text_only_video_provider}`
+    ? `Runtime: video -> ${runtime.default_video_provider} / prompt -> ${runtime.text_only_video_provider} / quality -> ${state.options?.defaults?.job?.quality_preset || "draft"}`
     : "Runtime: ...";
 }
 
@@ -750,6 +788,24 @@ function bindEvents() {
     renderChat();
     renderPlanSummary();
     showMessage("Chat cleared.");
+  });
+
+  ids.safeLaptopModeToggle.addEventListener("change", () => {
+    syncSafeLaptopMode();
+    renderPlanSummary();
+    showMessage(
+      ids.safeLaptopModeToggle.checked
+        ? "Safe laptop mode enabled. Quality forced to draft."
+        : "Safe laptop mode disabled.",
+    );
+  });
+
+  ids.generationModeInput.addEventListener("change", () => {
+    renderPlanSummary();
+  });
+
+  ids.qualityPresetInput.addEventListener("change", () => {
+    renderPlanSummary();
   });
 
   ids.jobList.addEventListener("click", async (event) => {
